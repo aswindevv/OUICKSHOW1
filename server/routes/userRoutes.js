@@ -1,19 +1,19 @@
 import express from "express";
 import {
-  getFavorites,        // ✅ Correct name (matches controller)
+  getFavourites,
   getUserBookings,
-  updateFavorite
+  updateFavourite,
 } from "../controllers/userController.js";
 
 const userRouter = express.Router();
 
-// ✅ Get a user's bookings
+// ✅ Get user bookings
 userRouter.get("/bookings", getUserBookings);
 
-// ✅ Add or remove a favorite movie
-userRouter.post("/update-favorite", updateFavorite);
+// ✅ Add or remove a movie from favourites
+userRouter.post("/update-favourite", updateFavourite);
 
-// ✅ Get user's favorite movies list
-userRouter.get("/favorites", getFavorites);
+// ✅ Get all favourite movies
+userRouter.get("/favourites", getFavourites);
 
 export default userRouter;

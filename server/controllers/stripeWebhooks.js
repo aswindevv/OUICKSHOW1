@@ -1,53 +1,77 @@
-import Stripe from "stripe";
-import Booking from "../models/Booking.js";
+ import stripe from "stripe";
+import Booking from '../models/Booking.js'; // Assuming the path from the image
 
-export const stripeWebhooks = async (req, res) => {
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-  const sig = req.headers["stripe-signature"];
+export const stripeWebhooks = async (request, response) => {
+    const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY);
+    const sig = request.headers["stripe-signature"];
 
-  let event;
+    let event;
 
-  try {
-    // 🧩 IMPORTANT: req.body is raw buffer because of express.raw()
-    event = stripe.webhooks.constructEvent(
-      req.body,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET
-    );
-  } catch (err) {
-    console.error("❌ Stripe signature verification failed:", err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  console.log("✅ Stripe event received:", event.type);
-
-  if (event.type === "checkout.session.completed") {
-    const session = event.data.object;
-    const bookingId = session.metadata?.bookingId;
-
-    if (!bookingId) {
-      console.error("⚠️ Missing bookingId in metadata");
-      return res.status(400).send("Missing bookingId");
-    }
-
+    // Ensure body is raw (using `rawBody` middleware if necessary)
     try {
-      const booking = await Booking.findById(bookingId);
-      if (!booking) {
-        console.error("⚠️ Booking not found:", bookingId);
-        return res.status(404).send("Booking not found");
-      }
-
-      booking.isPaid = true;
-      booking.paymentLink = "";
-      await booking.save();
-
-      console.log(`✅ Booking ${bookingId} marked as paid`);
-    } catch (dbErr) {
-      console.error("❌ Database update error:", dbErr.message);
-      return res.status(500).send("Failed to update booking");
+        event = stripeInstance.webhooks.constructEvent(
+            request.body,
+            sig,
+            process.env.STRIPE_WEBHOOK_SECRET
+        );
+    } catch (error) {
+        console.error(`Webhook signature verification failed: ${error.message}`);
+        return response.status(400).send(`Webhook Error: ${error.message}`);
     }
-  }
 
-  res.status(200).json({ received: true });
+    // Handle the event
+    try {
+        switch (event.type) {
+            case "payment_intent.succeeded": {
+                const paymentIntent = event.data.object;
+                const paymentIntentId = paymentIntent.id;
+
+                // List sessions related to the payment intent
+                const sessionList = await stripeInstance.checkout.sessions.list({
+                    payment_intent: paymentIntentId
+                });
+
+                // Ensure we have a session
+                if (sessionList.data.length === 0) {
+                    console.error("No session found for payment intent:", paymentIntentId);
+                    return response.status(400).send("No session found for payment intent");
+                }
+
+                const session = sessionList.data[0];
+
+                // Retrieve the booking ID from metadata
+                const bookingId = session.metadata.bookingId;
+
+                if (!bookingId) {
+                    console.error("Booking ID is missing in the metadata.");
+                    return response.status(400).send("Booking ID missing in session metadata");
+                }
+
+                // Update the booking with the payment success status
+                const booking = await Booking.findByIdAndUpdate(bookingId, {
+                    isPaid: true,
+                    paymentLink: "" // Clear payment link after payment
+                });
+
+                if (!booking) {
+                    console.error("Booking not found:", bookingId);
+                    return response.status(400).send("Booking not found");
+                }
+
+                console.log(`Payment for booking ${bookingId} succeeded.`);
+                break;
+            }
+
+            default:
+                console.log('Unhandled event type:', event.type);
+                break;
+        }
+
+        // Acknowledge receipt of the event
+        response.json({ received: true });
+
+    } catch (err) {
+        console.error("Webhook processing error:", err);
+        response.status(500).send("Internal Server Error");
+    }
 };
-
