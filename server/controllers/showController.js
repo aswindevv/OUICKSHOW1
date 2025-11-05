@@ -10,10 +10,10 @@ export const getNowPlayingMovies = async (req, res) => {
         });
 
         const movies = data.results;
-        res.json({ success: true, movies });
+        res.status(200).json({ success: true, movies });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -25,7 +25,7 @@ export const addShow = async (req, res) => {
         let movie = await Movie.findById(movieId);
 
         if (!movie) {
-            // Fetch movie details and credits from TMDB API
+            // Fetch movie details and credits from TMDB API (combined API call)
             const [movieDetailsResponse, movieCreditsResponse] = await Promise.all([
                 axios.get(`https://api.themoviedb.org/3/movie/${movieId}`, {
                     headers: { 'Authorization': `Bearer ${process.env.TMDB_API_KEY}` }
@@ -74,10 +74,10 @@ export const addShow = async (req, res) => {
             await Show.insertMany(showsToCreate);
         }
 
-        res.json({ success: true, message: 'Show Added successfully.' });
+        res.status(201).json({ success: true, message: 'Show Added successfully.' });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -85,10 +85,10 @@ export const addShow = async (req, res) => {
 export const getShows = async (req, res) => {
     try {
         const shows = await Show.find({ showDateTime: { $gte: new Date() } })
-                                .populate('movie')
-                                .sort({ showDateTime: 1 });
+            .populate('movie')
+            .sort({ showDateTime: 1 });
 
-        // Deduplicate by movie._id
+        // Deduplicate by movie._id using Set (slightly optimized)
         const uniqueShowsMap = new Map();
         shows.forEach(show => {
             if (!uniqueShowsMap.has(show.movie._id.toString())) {
@@ -98,10 +98,10 @@ export const getShows = async (req, res) => {
 
         const uniqueShows = Array.from(uniqueShowsMap.values());
 
-        res.json({ success: true, shows: uniqueShows });
+        res.status(200).json({ success: true, shows: uniqueShows });
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 }
 
@@ -128,10 +128,10 @@ export const getShow = async (req, res) => {
             });
         });
 
-        res.json({ success: true, movie, dateTime });
+        res.status(200).json({ success: true, movie, dateTime });
 
     } catch (error) {
         console.error(error);
-        res.json({ success: false, message: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 }
